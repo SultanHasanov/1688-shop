@@ -334,35 +334,35 @@ const ProductsPage = () => {
   const [showCartModal, setShowCartModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [lastContactMethod, setLastContactMethod] = useState("phone");
-
+ const [mobileDisplayMode, setMobileDisplayMode] = useState('single'); // 'single' или 'double'
   const touchStartX = useRef(0);
   const touchEndX = useRef(0);
 
   // Функция для работы с localStorage (в реальном приложении)
   // ВАЖНО: localStorage не работает в Claude.ai, используем состояние React
-const saveCartToStorage = (cartData) => {
+  const saveCartToStorage = (cartData) => {
     try {
-      localStorage.setItem('cart', JSON.stringify(cartData));
+      localStorage.setItem("cart", JSON.stringify(cartData));
     } catch (error) {
-      console.error('Ошибка сохранения корзины в localStorage:', error);
+      console.error("Ошибка сохранения корзины в localStorage:", error);
     }
   };
 
- const loadCartFromStorage = () => {
+  const loadCartFromStorage = () => {
     try {
-      const savedCart = localStorage.getItem('cart');
+      const savedCart = localStorage.getItem("cart");
       return savedCart ? JSON.parse(savedCart) : [];
     } catch (error) {
-      console.error('Ошибка загрузки корзины из localStorage:', error);
+      console.error("Ошибка загрузки корзины из localStorage:", error);
       return [];
     }
   };
 
- const clearCartFromStorage = () => {
+  const clearCartFromStorage = () => {
     try {
-      localStorage.removeItem('cart');
+      localStorage.removeItem("cart");
     } catch (error) {
-      console.error('Ошибка очистки корзины в localStorage:', error);
+      console.error("Ошибка очистки корзины в localStorage:", error);
     }
   };
 
@@ -378,13 +378,13 @@ const saveCartToStorage = (cartData) => {
   }, [cart]);
 
   // Загрузка карточек из API
-   useEffect(() => {
+  useEffect(() => {
     try {
       setLoading(true);
 
       // Используем локальный JSON
       const data = productsData;
-      console.log(data)
+      console.log(data);
 
       setProducts(data);
 
@@ -406,6 +406,16 @@ const saveCartToStorage = (cartData) => {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    products.forEach((product) => {
+      product.images.forEach((img) => {
+        const image = new Image();
+        image.src = img.src;
+      });
+    });
+  }, [products]);
+
   // Функции для навигации по изображениям
   const nextImage = (productIndex) => {
     setCurrentImageIndexes((prev) => ({
@@ -453,29 +463,29 @@ const saveCartToStorage = (cartData) => {
   };
 
   // Функции для работы с корзиной
-const addToCart = (productIndex) => {
-  const product = products[productIndex];
-  const selectedSize = selectedSizes[productIndex];
+  const addToCart = (productIndex) => {
+    const product = products[productIndex];
+    const selectedSize = selectedSizes[productIndex];
 
-  // Функция для преобразования цены
-  const parsePrice = (priceString) => {
-    if (!priceString) return 0;
-    return parseFloat(priceString.replace(' ₽', '').replace(/\s/g, ''));
+    // Функция для преобразования цены
+    const parsePrice = (priceString) => {
+      if (!priceString) return 0;
+      return parseFloat(priceString.replace(" ₽", "").replace(/\s/g, ""));
+    };
+
+    const cartItem = {
+      id: product.id || productIndex,
+      title: product.title,
+      price: selectedSize?.priceInRubles
+        ? parsePrice(selectedSize.priceInRubles)
+        : parsePrice(product.price),
+      image: product.images?.[0]?.src || "",
+      selectedSize: selectedSize,
+      quantity: 1,
+    };
+
+    setCart((prevCart) => [...prevCart, cartItem]);
   };
-
-  const cartItem = {
-    id: product.id || productIndex,
-    title: product.title,
-    price: selectedSize?.priceInRubles ? 
-           parsePrice(selectedSize.priceInRubles) : 
-           parsePrice(product.price),
-    image: product.images?.[0]?.src || "",
-    selectedSize: selectedSize,
-    quantity: 1,
-  };
-
-  setCart((prevCart) => [...prevCart, cartItem]);
-};
 
   const updateCartQuantity = (productId, sizeValue, newQuantity) => {
     if (newQuantity <= 0) {
@@ -516,7 +526,7 @@ const addToCart = (productIndex) => {
 
   // Функция отправки заказа в Telegram
   const sendToTelegram = async (orderData) => {
-    console.log(orderData)
+    console.log(orderData);
     const TELEGRAM_BOT_TOKEN = "8190479365:AAHnjDWn6sr_8SF6Cj_jw7HR2-Cu1fM_syA"; // Замените на ваш токен бота
     const TELEGRAM_CHAT_ID = "-4893760815"; // Замените на ID вашей группы
 
@@ -551,7 +561,6 @@ ${orderData.items
     `;
 
     try {
-
       const response = await fetch(
         `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
         {
@@ -707,16 +716,40 @@ ${orderData.items
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
             Сохраненные товары
           </h1>
-          <p className="text-gray-600">
+          <p className="text-gray-600 mb-4">
             {products.length} товар
             {products.length % 10 === 1 && products.length % 100 !== 11
               ? ""
               : "ов"}
           </p>
+
+          {/* Кнопка для мобильных */}
+          <div className="block md:hidden">
+            <button
+              onClick={() =>
+                setMobileDisplayMode(
+                  mobileDisplayMode === "single" ? "double" : "single"
+                )
+              }
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 transition-colors"
+            >
+              {mobileDisplayMode === "single"
+                ? "Показать две карточки"
+                : "Показать одну карточку"}
+            </button>
+          </div>
         </div>
 
         {/* Сетка товаров */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
+        <div
+          className={`grid ${
+            // Для мобильных
+            mobileDisplayMode === "single" ? "grid-cols-1" : "grid-cols-2"
+          } ${
+            // Для планшетов и десктопов (оставляем как было)
+            "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+          } gap-4 md:gap-6`}
+        >
           {products.map((product, index) => (
             <div
               key={product.id || index}
@@ -737,6 +770,7 @@ ${orderData.items
                         product.images[currentImageIndexes[index]].alt ||
                         product.title
                       }
+                      loading="lazy"
                       className="h-48 md:h-56 w-auto object-cover rounded-t-xl mx-auto"
                     />
 
