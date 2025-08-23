@@ -19,7 +19,7 @@ import {
   Send,
   Check,
 } from "lucide-react";
-
+import productsData from "./products_local.json";
 // Простой компонент Select без внешних библиотек
 const SimpleSelect = ({ defaultValue, options, onChange, style }) => {
   return (
@@ -378,42 +378,34 @@ const saveCartToStorage = (cartData) => {
   }, [cart]);
 
   // Загрузка карточек из API
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(
-          "https://3b7c09cbacf69a0e.mokky.dev/products"
-        );
+   useEffect(() => {
+    try {
+      setLoading(true);
 
-        if (!response.ok) {
-          throw new Error("Ошибка загрузки товаров");
+      // Используем локальный JSON
+      const data = productsData;
+      console.log(data)
+
+      setProducts(data);
+
+      // Инициализируем индексы изображений для каждого товара
+      const indexes = {};
+      const initialSizes = {};
+      data.forEach((product, index) => {
+        indexes[index] = 0;
+        if (product.sizes && product.sizes.length > 0) {
+          initialSizes[index] = product.sizes[0];
         }
+      });
 
-        const data = await response.json();
-        setProducts(data);
-
-        // Инициализируем индексы изображений для каждого товара
-        const indexes = {};
-        const initialSizes = {};
-        data.forEach((product, index) => {
-          indexes[index] = 0;
-          if (product.sizes && product.sizes.length > 0) {
-            initialSizes[index] = product.sizes[0];
-          }
-        });
-        setCurrentImageIndexes(indexes);
-        setSelectedSizes(initialSizes);
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProducts();
+      setCurrentImageIndexes(indexes);
+      setSelectedSizes(initialSizes);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
-
   // Функции для навигации по изображениям
   const nextImage = (productIndex) => {
     setCurrentImageIndexes((prev) => ({
