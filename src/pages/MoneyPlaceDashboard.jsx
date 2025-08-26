@@ -9,6 +9,10 @@ import {
   Download,
   Calculator,
   X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import MarginCalculator from "../components/MarginCalculator";
@@ -31,6 +35,14 @@ const MoneyPlaceDashboard = () => {
   const [recentSearches, setRecentSearches] = useState([]);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [hoveredSearch, setHoveredSearch] = useState(null);
+
+  // Состояние для пагинации
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    pageCount: 1,
+    perPage: 20,
+    totalCount: 0,
+  });
 
   const marketplaces = [
     { value: "wildberries", label: "Wildberries", color: "bg-purple-500" },
@@ -57,6 +69,21 @@ const MoneyPlaceDashboard = () => {
     { id: "brands", label: "Бренды", icon: Star },
     { id: "keywords", label: "Ключевые слова", icon: Search },
   ];
+
+  // Функция для извлечения данных пагинации из заголовков
+  const extractPaginationFromHeaders = (headers) => {
+    const currentPage = parseInt(headers.get("x-pagination-current-page")) || 1;
+    const pageCount = parseInt(headers.get("x-pagination-page-count")) || 1;
+    const perPage = parseInt(headers.get("x-pagination-per-page")) || 20;
+    const totalCount = parseInt(headers.get("x-pagination-total-count")) || 0;
+
+    return {
+      currentPage,
+      pageCount,
+      perPage,
+      totalCount,
+    };
+  };
 
   // Функция для скачивания изображения
   const downloadImage = async (imageUrl, fileName) => {
@@ -159,6 +186,10 @@ const MoneyPlaceDashboard = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      // Извлекаем данные пагинации из заголовков
+      const paginationData = extractPaginationFromHeaders(response.headers);
+      setPagination(paginationData);
+
       const data = await response.json();
       return data;
     } catch (err) {
@@ -169,15 +200,16 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const searchProducts = async () => {
+  const searchProducts = async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     const data = await makeApiRequest("/search/products", {
       "q[name][like]": searchQuery,
       "q[mp][in]": selectedMp,
-      "per-page": 20,
+      "per-page": pagination.perPage,
       sort: "position",
       "q[position][more]": 0,
+      page: page,
     });
 
     if (data) {
@@ -185,15 +217,16 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const searchByCategory = async () => {
+  const searchByCategory = async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     const data = await makeApiRequest("/search/categories", {
       "q[name][like]": searchQuery,
       "q[mp][in]": selectedMp,
-      "per-page": 20,
+      "per-page": pagination.perPage,
       sort: "-count",
       "q[count][more]": 0,
+      page: page,
     });
 
     if (data) {
@@ -201,13 +234,14 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const searchSellers = async () => {
+  const searchSellers = async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     const data = await makeApiRequest("/search/sellers", {
       "q[name][like]": searchQuery,
       "q[mp][in]": selectedMp,
-      "per-page": 20,
+      "per-page": pagination.perPage,
+      page: page,
     });
 
     if (data) {
@@ -215,13 +249,14 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const searchBrands = async () => {
+  const searchBrands = async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     const data = await makeApiRequest("/search/brands", {
       "q[name][like]": searchQuery,
       "q[mp][in]": selectedMp,
-      "per-page": 20,
+      "per-page": pagination.perPage,
+      page: page,
     });
 
     if (data) {
@@ -229,13 +264,14 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const searchKeywords = async () => {
+  const searchKeywords = async (page = 1) => {
     if (!searchQuery.trim()) return;
 
     const data = await makeApiRequest("/search/keywords", {
       "q[name][like]": searchQuery,
       "q[mp][in]": selectedMp,
-      "per-page": 20,
+      "per-page": pagination.perPage,
+      page: page,
     });
 
     if (data) {
@@ -243,13 +279,14 @@ const MoneyPlaceDashboard = () => {
     }
   };
 
-  const getTopStatistics = async () => {
+  const getTopStatistics = async (page = 1) => {
     const params = {
       mp: selectedMp,
       type: selectedType,
       period: selectedPeriod,
       sort: "-turnover",
-      "per-page": 20,
+      "per-page": pagination.perPage,
+      page: page,
     };
 
     // Добавляем параметр поиска, если он есть
@@ -277,30 +314,73 @@ const MoneyPlaceDashboard = () => {
     localStorage.removeItem("moneyplaceSearchQuery");
     setSearchResults([]);
     setStatistics(null);
+    setPagination({
+      currentPage: 1,
+      pageCount: 1,
+      perPage: 20,
+      totalCount: 0,
+    });
   };
 
-  const handleSearch = () => {
+  const handleSearch = (page = 1) => {
     saveSearch(searchQuery);
     switch (activeTab) {
       case "products":
-        searchProducts();
+        searchProducts(page);
         break;
       case "categories":
-        searchByCategory();
+        searchByCategory(page);
         break;
       case "sellers":
-        searchSellers();
+        searchSellers(page);
         break;
       case "brands":
-        searchBrands();
+        searchBrands(page);
         break;
       case "keywords":
-        searchKeywords();
+        searchKeywords(page);
         break;
       case "statistics":
-        getTopStatistics(); // Теперь будет учитывать searchQuery
+        getTopStatistics(page);
         break;
     }
+  };
+
+  // Функции для пагинации
+  const goToPage = (page) => {
+    if (
+      page >= 1 &&
+      page <= pagination.pageCount &&
+      page !== pagination.currentPage
+    ) {
+      handleSearch(page);
+      // Прокручиваем к началу результатов
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
+
+  useEffect(() => {
+    // Если у нас уже есть данные и мы меняем perPage, выполняем новый запрос
+    if (
+      (searchResults.length > 0 || statistics) &&
+      pagination.currentPage > 0
+    ) {
+      handleSearch(pagination.currentPage);
+    }
+  }, [pagination.perPage]);
+
+  const goToFirstPage = () => goToPage(1);
+  const goToLastPage = () => goToPage(pagination.pageCount);
+  const goToPrevPage = () => goToPage(pagination.currentPage - 1);
+  const goToNextPage = () => goToPage(pagination.currentPage + 1);
+
+  // Функция для изменения количества элементов на странице
+  const changePerPage = (newPerPage) => {
+    setPagination((prev) => ({
+      ...prev,
+      perPage: newPerPage,
+      currentPage: 1, // Сбрасываем на первую страницу при изменении количества элементов
+    }));
   };
 
   // убираем вызов getTopStatistics из useEffect
@@ -410,16 +490,6 @@ const MoneyPlaceDashboard = () => {
     window.open(urls[mp], "_blank");
   };
 
-  const [selectedProduct, setSelectedProduct] = useState(null);
-
-  const openProductModal = (item) => {
-    setSelectedProduct(item);
-  };
-
-  const closeProductModal = () => {
-    setSelectedProduct(null);
-  };
-
   const renderStatisticsTable = () => (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
       <div className="overflow-x-auto">
@@ -450,114 +520,108 @@ const MoneyPlaceDashboard = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {statistics?.map(
-              (item, index) =>
-                console.log(item) || (
-                  <tr
-                    key={item.sku}
-                    className="hover:bg-gray-50 transition-colors"
-                  >
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-4">
-                        {item.product?.image && (
-                          <div className="relative">
-                            <img
-                              src={item.product.image}
-                              alt={item.product.name}
-                              className="w-12 h-12 object-cover rounded-lg"
-                            />
-                            <button
-                              onClick={() =>
-                                downloadImage(
-                                  item.product.image,
-                                  `product-${item.sku}.jpg`
-                                )
-                              }
-                              className="absolute top-0 right-0 bg-blue-600 text-white p-1 rounded-bl-lg rounded-tr-lg hover:bg-blue-700 transition-colors"
-                              title="Скачать изображение"
-                            >
-                              <Download className="w-3 h-3" />
-                            </button>
-                          </div>
-                        )}
-                        <div className="flex-1 min-w-0">
-                          <Link
-                            to={`/product/${item.id_product}`}
-                            className="text-left hover:text-blue-600 transition-colors"
-                          >
-                            <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">
-                              {item.product?.name}
-                            </p>
-                          </Link>
-                          <div className="flex items-center space-x-3 text-xs text-gray-500">
-                            <span
-                              className={`inline-flex items-center px-2 py-1 rounded text-white ${
-                                marketplaces.find((mp) => mp.value === item.mp)
-                                  ?.color
-                              }`}
-                            >
-                              WB
+            {statistics?.map((item, index) => (
+              <tr key={item.sku} className="hover:bg-gray-50 transition-colors">
+                <td className="px-6 py-4">
+                  <div className="flex items-center space-x-4">
+                    {item.product?.image && (
+                      <div className="relative">
+                        <img
+                          src={item.product.image}
+                          alt={item.product.name}
+                          className="w-12 h-12 object-cover rounded-lg"
+                        />
+                        <button
+                          onClick={() =>
+                            downloadImage(
+                              item.product.image,
+                              `product-${item.sku}.jpg`
+                            )
+                          }
+                          className="absolute top-0 right-0 bg-blue-600 text-white p-1 rounded-bl-lg rounded-tr-lg hover:bg-blue-700 transition-colors"
+                          title="Скачать изображение"
+                        >
+                          <Download className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <Link
+                        to={`/product/${item.id_product}`}
+                        className="text-left hover:text-blue-600 transition-colors"
+                      >
+                        <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">
+                          {item.product?.name}
+                        </p>
+                      </Link>
+                      <div className="flex items-center space-x-3 text-xs text-gray-500">
+                        <span
+                          className={`inline-flex items-center px-2 py-1 rounded text-white ${
+                            marketplaces.find((mp) => mp.value === item.mp)
+                              ?.color
+                          }`}
+                        >
+                          WB
+                        </span>
+                        <button
+                          onClick={() => openProductPage(item.sku, item.mp)}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          {item.sku}
+                        </button>
+                        {item.product?.rate && (
+                          <div className="flex items-center">
+                            <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
+                            <span>{item.product.rate}</span>
+                            <span className="ml-1">
+                              {formatNumber(item.product.comments_count)}{" "}
+                              отзывов
                             </span>
-                            <button
-                              onClick={() => openProductPage(item.sku, item.mp)}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
-                            >
-                              {item.sku}
-                            </button>
-                            {item.product?.rate && (
-                              <div className="flex items-center">
-                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 mr-1" />
-                                <span>{item.product.rate}</span>
-                                <span className="ml-1">
-                                  {formatNumber(item.product.comments_count)}{" "}
-                                  отзывов
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm text-gray-900">
-                        {formatNumber(item?.turnover || 0)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm text-gray-900">
-                        {formatNumber(item?.last_amount || 0)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="text-sm">
-                        <div className=" text-gray-900">
-                          {formatPrice(item.product?.real_price || 0)}
-                        </div>
-                        {item.product?.price_with_discount && (
-                          <div className="text-xs text-gray-500 line-through">
-                            {formatPrice(item.product.price_with_discount)}
                           </div>
                         )}
                       </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm text-gray-900">
-                        {formatNumber(item?.sell_commission || 0)}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm text-gray-900">
-                        {formatNumber(item?.buyout || 0)}%
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className="text-sm font-semibold text-gray-900">
-                        {formatNumber(item.Sales)}
-                      </span>
-                    </td>
-                  </tr>
-                )
-            )}
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm text-gray-900">
+                    {formatNumber(item?.turnover || 0)}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm text-gray-900">
+                    {formatNumber(item?.last_amount || 0)}
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <div className="text-sm">
+                    <div className=" text-gray-900">
+                      {formatPrice(item.product?.real_price || 0)}
+                    </div>
+                    {item.product?.price_with_discount && (
+                      <div className="text-xs text-gray-500 line-through">
+                        {formatPrice(item.product.price_with_discount)}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm text-gray-900">
+                    {formatNumber(item?.sell_commission || 0)}%
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm text-gray-900">
+                    {formatNumber(item?.buyout || 0)}%
+                  </span>
+                </td>
+                <td className="px-6 py-4 text-center">
+                  <span className="text-sm font-semibold text-gray-900">
+                    {formatNumber(item.Sales)}
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -590,6 +654,145 @@ const MoneyPlaceDashboard = () => {
     </div>
   );
 
+  // Компонент пагинации
+  const renderPagination = () => {
+    if (pagination.pageCount <= 1) return null;
+
+    const { currentPage, pageCount } = pagination;
+
+    // Определяем диапазон страниц для отображения
+    const getVisiblePages = () => {
+      const delta = 2; // Количество страниц слева и справа от текущей
+      const range = [];
+      const rangeWithDots = [];
+
+      for (
+        let i = Math.max(2, currentPage - delta);
+        i <= Math.min(pageCount - 1, currentPage + delta);
+        i++
+      ) {
+        range.push(i);
+      }
+
+      if (currentPage - delta > 2) {
+        rangeWithDots.push(1, "...");
+      } else {
+        rangeWithDots.push(1);
+      }
+
+      rangeWithDots.push(...range);
+
+      if (currentPage + delta < pageCount - 1) {
+        rangeWithDots.push("...", pageCount);
+      } else {
+        if (pageCount > 1) {
+          rangeWithDots.push(pageCount);
+        }
+      }
+
+      return rangeWithDots;
+    };
+
+    const visiblePages = getVisiblePages();
+
+    return (
+      <div className="bg-white rounded-xl shadow-lg p-6 mt-6">
+        <div className="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0">
+          {/* Информация о результатах */}
+          <div className="text-sm text-gray-600">
+            Показано {(currentPage - 1) * pagination.perPage + 1} -{" "}
+            {Math.min(currentPage * pagination.perPage, pagination.totalCount)}{" "}
+            из {formatNumber(pagination.totalCount)} результатов
+          </div>
+
+          {/* Селектор количества элементов на странице */}
+          <div className="flex items-center space-x-2 text-sm">
+            <span className="text-gray-600">Показать по:</span>
+            <select
+              value={pagination.perPage}
+              onChange={(e) => changePerPage(parseInt(e.target.value))}
+              className="px-3 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={30}>30</option>
+              <option value={50}>50</option>
+            </select>
+          </div>
+
+          {/* Навигация по страницам */}
+          <div className="flex items-center space-x-1">
+            {/* Первая страница */}
+            <button
+              onClick={goToFirstPage}
+              disabled={currentPage === 1}
+              className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Первая страница"
+            >
+              <ChevronsLeft className="w-4 h-4" />
+            </button>
+
+            {/* Предыдущая страница */}
+            <button
+              onClick={goToPrevPage}
+              disabled={currentPage === 1}
+              className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Предыдущая страница"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            {/* Номера страниц */}
+            <div className="flex items-center space-x-1">
+              {visiblePages.map((page, index) =>
+                page === "..." ? (
+                  <span
+                    key={`dots-${index}`}
+                    className="px-3 py-2 text-gray-400"
+                  >
+                    ...
+                  </span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => goToPage(page)}
+                    className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
+                      page === currentPage
+                        ? "bg-blue-600 text-white"
+                        : "text-gray-700 hover:bg-gray-100"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+            </div>
+
+            {/* Следующая страница */}
+            <button
+              onClick={goToNextPage}
+              disabled={currentPage === pageCount}
+              className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Следующая страница"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {/* Последняя страница */}
+            <button
+              onClick={goToLastPage}
+              disabled={currentPage === pageCount}
+              className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Последняя страница"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
       {/* Header */}
@@ -620,7 +823,6 @@ const MoneyPlaceDashboard = () => {
                     </span>
                   </a>
                 </div>
-
               </div>
             </div>
             <div className="flex items-center space-x-4">
@@ -637,7 +839,7 @@ const MoneyPlaceDashboard = () => {
               </select>
             </div>
           </div>
-                <p className="text-gray-600">Аналитика маркетплейсов</p>
+          <p className="text-gray-600">Аналитика маркетплейсов</p>
         </div>
       </header>
 
@@ -856,6 +1058,9 @@ const MoneyPlaceDashboard = () => {
               </div>
             )}
         </div>
+
+        {/* Пагинация */}
+        {(searchResults.length > 0 || statistics) && renderPagination()}
 
         {/* Empty State */}
         {!loading && searchResults.length === 0 && !statistics && (
