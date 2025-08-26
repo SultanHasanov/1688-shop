@@ -13,12 +13,21 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Bot,
+  TrendingUp,
+  TrendingDown,
+  AlertCircle,
+  CheckCircle,
+  DollarSign,
+  MessageSquare,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import MarginCalculator from "../components/MarginCalculator";
 
 const API_KEY = "XGXVQZX24QKQ3YGL";
 const API_BASE = "https://api.moneyplace.io";
+const OPENROUTER_API_KEY =
+  "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";
 
 const MoneyPlaceDashboard = () => {
   const [activeTab, setActiveTab] = useState("statistics");
@@ -35,6 +44,13 @@ const MoneyPlaceDashboard = () => {
   const [recentSearches, setRecentSearches] = useState([]);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [hoveredSearch, setHoveredSearch] = useState(null);
+
+  // AI Analyst states
+  const [aiAnalysis, setAiAnalysis] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [purchasePrice, setPurchasePrice] = useState("");
+  const [analysisHistory, setAnalysisHistory] = useState([]);
 
   // Состояние для пагинации
   const [pagination, setPagination] = useState({
@@ -69,6 +85,110 @@ const MoneyPlaceDashboard = () => {
     { id: "brands", label: "Бренды", icon: Star },
     { id: "keywords", label: "Ключевые слова", icon: Search },
   ];
+
+  // AI Analysis function
+  const analyzeMarketData = async (data, userPurchasePrice = null) => {
+    setAiLoading(true);
+    try {
+      // Подготавливаем данные для анализа
+      const analysisData = data.slice(0, 10).map((item) => ({
+        name: item.product?.name || "Неизвестный товар",
+        turnover: item.turnover || 0,
+        sales: item.Sales || 0,
+        sellPrice: item.product?.real_price || 0,
+        commission: item.sell_commission || 0,
+        buyout: item.buyout || 0,
+        rating: item.product?.rate || 0,
+        reviews: item.product?.comments_count || 0,
+        amount: item.last_amount || 0,
+        sku: item.sku,
+      }));
+
+      const prompt = `Ты - эксперт по аналитике маркетплейсов. Проанализируй данные товаров и дай рекомендации по продажам.
+
+Данные товаров:
+${JSON.stringify(analysisData, null, 2)}
+
+${
+  userPurchasePrice
+    ? `Цена закупки пользователя: ${userPurchasePrice} рублей`
+    : ""
+}
+
+Маркетплейс: ${selectedMp}
+Период анализа: ${selectedPeriod}
+Тип продажи: ${selectedType}
+
+Проанализируй данные и дай конкретные рекомендации:
+
+1. Общий анализ рынка в этой нише
+2. Топ-3 самых перспективных товара с обоснованием
+3. ${
+        userPurchasePrice
+          ? `Рекомендации по закупке при цене ${userPurchasePrice} руб:
+   - Рекомендуемая цена продажи
+   - Ожидаемая маржа
+   - Количество товара для первой закупки
+   - Прогноз окупаемости`
+          : "Запроси у пользователя цену закупки для детальных рекомендаций"
+      }
+4. Риски и предупреждения
+5. Конкретные действия для входа в нишу
+
+Отвечай кратко, структурированно и по делу. Используй конкретные цифры из данных.`;
+
+      const response = await fetch(
+        "https://openrouter.ai/api/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": window.location.origin,
+            "X-Title": "MoneyPlace AI Analytics",
+          },
+          body: JSON.stringify({
+            model: "openai/gpt-4o",
+            messages: [
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+            max_tokens: 1500,
+            temperature: 0.7,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`AI API error: ${response.status}`);
+      }
+
+      const aiResponse = await response.json();
+      const analysis = aiResponse.choices[0].message.content;
+
+      const analysisResult = {
+        id: Date.now(),
+        timestamp: new Date().toLocaleString("ru-RU"),
+        query: searchQuery,
+        marketplace: selectedMp,
+        period: selectedPeriod,
+        purchasePrice: userPurchasePrice,
+        analysis: analysis,
+        dataCount: analysisData.length,
+      };
+
+      setAiAnalysis(analysisResult);
+      setAnalysisHistory((prev) => [analysisResult, ...prev.slice(0, 4)]);
+      setShowAiPanel(true);
+    } catch (error) {
+      console.error("AI Analysis error:", error);
+      setError(`Ошибка AI анализа: ${error.message}`);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // Функция для извлечения данных пагинации из заголовков
   const extractPaginationFromHeaders = (headers) => {
@@ -121,7 +241,7 @@ const MoneyPlaceDashboard = () => {
   };
 
   const removeRecentSearch = (searchToRemove, e) => {
-    e.stopPropagation(); // Предотвращаем срабатывание клика по кнопке
+    e.stopPropagation();
     const updatedSearches = recentSearches.filter(
       (search) => search !== searchToRemove
     );
@@ -159,7 +279,6 @@ const MoneyPlaceDashboard = () => {
   // Эффект для управления анимацией калькулятора
   useEffect(() => {
     if (showCalculator) {
-      // Небольшая задержка для начала анимации
       setTimeout(() => setCalculatorVisible(true), 10);
     } else {
       setCalculatorVisible(false);
@@ -186,7 +305,6 @@ const MoneyPlaceDashboard = () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      // Извлекаем данные пагинации из заголовков
       const paginationData = extractPaginationFromHeaders(response.headers);
       setPagination(paginationData);
 
@@ -289,7 +407,6 @@ const MoneyPlaceDashboard = () => {
       page: page,
     };
 
-    // Добавляем параметр поиска, если он есть
     if (searchQuery.trim()) {
       params["q[name][like]"] = searchQuery;
     }
@@ -304,16 +421,16 @@ const MoneyPlaceDashboard = () => {
   const handleRecentSearchClick = (search) => {
     setSearchQuery(search);
     saveSearch(search);
-    // Можно автоматически выполнить поиск
     setTimeout(() => handleSearch(), 100);
   };
 
-  // Функция для очистки поиска
   const clearSearch = () => {
     setSearchQuery("");
     localStorage.removeItem("moneyplaceSearchQuery");
     setSearchResults([]);
     setStatistics(null);
+    setAiAnalysis(null);
+    setShowAiPanel(false);
     setPagination({
       currentPage: 1,
       pageCount: 1,
@@ -354,13 +471,11 @@ const MoneyPlaceDashboard = () => {
       page !== pagination.currentPage
     ) {
       handleSearch(page);
-      // Прокручиваем к началу результатов
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   useEffect(() => {
-    // Если у нас уже есть данные и мы меняем perPage, выполняем новый запрос
     if (
       (searchResults.length > 0 || statistics) &&
       pagination.currentPage > 0
@@ -374,20 +489,13 @@ const MoneyPlaceDashboard = () => {
   const goToPrevPage = () => goToPage(pagination.currentPage - 1);
   const goToNextPage = () => goToPage(pagination.currentPage + 1);
 
-  // Функция для изменения количества элементов на странице
   const changePerPage = (newPerPage) => {
     setPagination((prev) => ({
       ...prev,
       perPage: newPerPage,
-      currentPage: 1, // Сбрасываем на первую страницу при изменении количества элементов
+      currentPage: 1,
     }));
   };
-
-  // убираем вызов getTopStatistics из useEffect
-  useEffect(() => {
-    if (activeTab !== "statistics") return;
-    // ничего не делаем автоматически
-  }, [activeTab, selectedMp, selectedType, selectedPeriod, searchQuery]);
 
   const formatNumber = (num) => {
     return new Intl.NumberFormat("ru-RU").format(num);
@@ -398,6 +506,180 @@ const MoneyPlaceDashboard = () => {
       currency: "RUB",
       minimumFractionDigits: 0,
     }).format(price);
+  };
+
+  // AI Analysis Panel Component
+  const renderAiAnalysisPanel = () => {
+    if (!showAiPanel) return null;
+
+    return (
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-lg p-6 mb-8 border border-blue-200">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-3">
+            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-2 rounded-lg">
+              <Bot className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">
+                AI Анализ рынка
+              </h3>
+              <p className="text-sm text-gray-600">
+                Рекомендации на основе данных
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAiPanel(false)}
+            className="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Форма ввода цены закупки */}
+        {!aiAnalysis ? (
+          <div className="bg-white rounded-lg p-6 border border-blue-200">
+            <div className="text-center mb-6">
+              <Bot className="w-12 h-12 text-blue-600 mx-auto mb-3" />
+              <h4 className="text-lg font-semibold text-gray-900 mb-2">
+                Получить AI рекомендации по торговле
+              </h4>
+              <p className="text-gray-600">
+                Введите цену закупки товара для персональных рекомендаций
+              </p>
+            </div>
+
+            <div className="max-w-md mx-auto">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Цена закупки товара (в рублях){" "}
+                <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="number"
+                  placeholder="Например: 1500"
+                  value={purchasePrice}
+                  onChange={(e) => setPurchasePrice(e.target.value)}
+                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center text-lg"
+                  min="1"
+                  step="1"
+                />
+                <span className="text-gray-500 font-medium">₽</span>
+              </div>
+
+              <button
+                onClick={() =>
+                  statistics && analyzeMarketData(statistics, purchasePrice)
+                }
+                disabled={aiLoading || !purchasePrice || purchasePrice <= 0}
+                className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                {aiLoading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>Анализирую данные...</span>
+                  </>
+                ) : (
+                  <>
+                    <TrendingUp className="w-5 h-5" />
+                    <span>Получить AI рекомендации</span>
+                  </>
+                )}
+              </button>
+
+              {!purchasePrice && (
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Цена закупки необходима для расчета маржи и рентабельности
+                </p>
+              )}
+            </div>
+          </div>
+        ) : aiLoading ? (
+          <div className="bg-white rounded-lg p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">AI анализирует данные рынка...</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-lg p-6 border border-blue-200">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <CheckCircle className="w-5 h-5 text-green-500" />
+                <span className="text-sm text-gray-600">
+                  Анализ от {aiAnalysis.timestamp} | {aiAnalysis.dataCount}{" "}
+                  товаров
+                </span>
+              </div>
+              {aiAnalysis.purchasePrice && (
+                <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">
+                  <DollarSign className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">
+                    Закупка: {formatPrice(aiAnalysis.purchasePrice)}
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="prose max-w-none">
+              <div
+                className="text-sm text-gray-800 leading-relaxed"
+                dangerouslySetInnerHTML={{
+                  __html: aiAnalysis.analysis
+                    .replace(
+                      /### (.+)/g,
+                      '<h3 class="text-lg font-semibold text-gray-900 mt-6 mb-3 border-b border-gray-200 pb-2">$1</h3>'
+                    )
+                    .replace(
+                      /\*\*(.+?)\*\*/g,
+                      '<strong class="font-semibold text-gray-900">$1</strong>'
+                    )
+                    .replace(/- (.+)/g, '<li class="ml-4 mb-2">$1</li>')
+                    .replace(
+                      /(\d+\. .+)/g,
+                      '<div class="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500"><div class="font-medium text-blue-900">$1</div></div>'
+                    )
+                    .replace(/\n\n/g, "")
+                    .replace(/\n/g, ""),
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* История анализов */}
+        {analysisHistory.length > 1 && (
+          <div className="mt-6">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">
+              История анализов:
+            </h4>
+            <div className="space-y-2">
+              {analysisHistory.slice(1).map((analysis) => (
+                <div
+                  key={analysis.id}
+                  className="bg-white rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={() => setAiAnalysis(analysis)}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <MessageSquare className="w-4 h-4 text-gray-400" />
+                      <span className="text-sm font-medium text-gray-900">
+                        {analysis.query || "Анализ статистики"}
+                      </span>
+                    </div>
+                    <span className="text-xs text-gray-500">
+                      {analysis.timestamp}
+                    </span>
+                  </div>
+                  {analysis.purchasePrice && (
+                    <div className="text-xs text-green-600 mt-1">
+                      Цена закупки: {formatPrice(analysis.purchasePrice)}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderProductCard = (product) => (
@@ -839,7 +1121,7 @@ const MoneyPlaceDashboard = () => {
               </select>
             </div>
           </div>
-          <p className="text-gray-600">Аналитика маркетплейсов</p>
+          <p className="text-gray-600">Аналитика маркетплейсов с AI помощником</p>
         </div>
       </header>
 
@@ -885,7 +1167,7 @@ const MoneyPlaceDashboard = () => {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyPress={(e) => e.key === "Enter" && handleSearch()}
                   onFocus={() => setIsInputFocused(true)}
-                  onBlur={() => setTimeout(() => setIsInputFocused(false), 150)} // Небольшая задержка для клика по элементам
+                  onBlur={() => setTimeout(() => setIsInputFocused(false), 150)}
                   className="w-full pl-10 pr-10 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 {searchQuery && (
@@ -901,7 +1183,7 @@ const MoneyPlaceDashboard = () => {
                 {isInputFocused &&
                   searchQuery === "" &&
                   recentSearches.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 mt-1 transition-all duration-300 ease-in-out transform opacity-0 animate-fadeIn">
+                    <div className="absolute top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 mt-1">
                       <div className="p-2">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-xs text-gray-500">
@@ -985,7 +1267,7 @@ const MoneyPlaceDashboard = () => {
             )}
 
             <button
-              onClick={handleSearch}
+              onClick={() => handleSearch()}
               disabled={loading}
               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 flex items-center space-x-2"
             >
@@ -998,15 +1280,29 @@ const MoneyPlaceDashboard = () => {
             </button>
 
             {activeTab === "statistics" && (
-              <button
-                onClick={() => setShowCalculator(!showCalculator)}
-                className="px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition-all duration-200 flex items-center space-x-2"
-              >
-                <Calculator className="w-5 h-5" />
-                <span>
-                  {showCalculator ? "Скрыть калькулятор" : "Калькулятор маржи"}
-                </span>
-              </button>
+              <>
+                <button
+                  onClick={() => setShowCalculator(!showCalculator)}
+                  className="px-4 py-3 bg-gradient-to-r from-green-600 to-teal-600 text-white rounded-lg font-medium hover:from-green-700 hover:to-teal-700 transition-all duration-200 flex items-center space-x-2"
+                >
+                  <Calculator className="w-5 h-5" />
+                  <span>
+                    {showCalculator
+                      ? "Скрыть калькулятор"
+                      : "Калькулятор маржи"}
+                  </span>
+                </button>
+
+                {statistics && !showAiPanel && (
+                  <button
+                    onClick={() => setShowAiPanel(true)}
+                    className="px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-medium hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 flex items-center space-x-2"
+                  >
+                    <Bot className="w-5 h-5" />
+                    <span>AI анализ</span>
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1014,9 +1310,15 @@ const MoneyPlaceDashboard = () => {
         {/* Error Message */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-            <p className="text-red-700">{error}</p>
+            <div className="flex items-center">
+              <AlertCircle className="w-5 h-5 text-red-500 mr-2" />
+              <p className="text-red-700">{error}</p>
+            </div>
           </div>
         )}
+
+        {/* AI Analysis Panel */}
+        {activeTab === "statistics" && renderAiAnalysisPanel()}
 
         {/* Калькулятор с анимацией */}
         {activeTab === "statistics" && (
