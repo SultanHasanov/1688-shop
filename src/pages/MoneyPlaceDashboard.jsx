@@ -14,20 +14,16 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Bot,
-  TrendingUp,
-  TrendingDown,
   AlertCircle,
-  CheckCircle,
-  DollarSign,
-  MessageSquare,
+  Check,
+  Copy,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import MarginCalculator from "../components/MarginCalculator";
-
+import useAIAnalysis from "../components/AIAnalysisService";
+import AIAnalysisPanel from "../components/AIAnalysisPanel";
 const API_KEY = "XGXVQZX24QKQ3YGL";
 const API_BASE = "https://api.moneyplace.io";
-const OPENROUTER_API_KEY =
-  "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";
 
 const MoneyPlaceDashboard = () => {
   const [activeTab, setActiveTab] = useState("statistics");
@@ -44,10 +40,18 @@ const MoneyPlaceDashboard = () => {
   const [recentSearches, setRecentSearches] = useState([]);
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [hoveredSearch, setHoveredSearch] = useState(null);
+  const [copiedItemId, setCopiedItemId] = useState(null);
+  const {
+    aiAnalysis,
+    aiLoading,
+    error: aiError,
+    analyzeMarketData,
+    clearAnalysis,
+    setAiAnalysis,
+  } = useAIAnalysis();
 
   // AI Analyst states
-  const [aiAnalysis, setAiAnalysis] = useState(null);
-  const [aiLoading, setAiLoading] = useState(false);
+
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [purchasePrice, setPurchasePrice] = useState("");
   const [analysisHistory, setAnalysisHistory] = useState([]);
@@ -87,106 +91,21 @@ const MoneyPlaceDashboard = () => {
   ];
 
   // AI Analysis function
-  const analyzeMarketData = async (data, userPurchasePrice = null) => {
-    setAiLoading(true);
+  const handleAIAnalysis = async () => {
     try {
-      // Подготавливаем данные для анализа
-      const analysisData = data.slice(0, 10).map((item) => ({
-        name: item.product?.name || "Неизвестный товар",
-        turnover: item.turnover || 0,
-        sales: item.Sales || 0,
-        sellPrice: item.product?.real_price || 0,
-        commission: item.sell_commission || 0,
-        buyout: item.buyout || 0,
-        rating: item.product?.rate || 0,
-        reviews: item.product?.comments_count || 0,
-        amount: item.last_amount || 0,
-        sku: item.sku,
-      }));
-
-      const prompt = `Ты - эксперт по аналитике маркетплейсов. Проанализируй данные товаров и дай рекомендации по продажам.
-
-Данные товаров:
-${JSON.stringify(analysisData, null, 2)}
-
-${
-  userPurchasePrice
-    ? `Цена закупки пользователя: ${userPurchasePrice} рублей`
-    : ""
-}
-
-Маркетплейс: ${selectedMp}
-Период анализа: ${selectedPeriod}
-Тип продажи: ${selectedType}
-
-Проанализируй данные и дай конкретные рекомендации:
-
-1. Общий анализ рынка в этой нише
-2. Топ-3 самых перспективных товара с обоснованием
-3. ${
-        userPurchasePrice
-          ? `Рекомендации по закупке при цене ${userPurchasePrice} руб:
-   - Рекомендуемая цена продажи
-   - Ожидаемая маржа
-   - Количество товара для первой закупки
-   - Прогноз окупаемости`
-          : "Запроси у пользователя цену закупки для детальных рекомендаций"
-      }
-4. Риски и предупреждения
-5. Конкретные действия для входа в нишу
-
-Отвечай кратко, структурированно и по делу. Используй конкретные цифры из данных.`;
-
-      const response = await fetch(
-        "https://openrouter.ai/api/v1/chat/completions",
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": window.location.origin,
-            "X-Title": "MoneyPlace AI Analytics",
-          },
-          body: JSON.stringify({
-            model: "openai/gpt-4o",
-            messages: [
-              {
-                role: "user",
-                content: prompt,
-              },
-            ],
-            max_tokens: 1500,
-            temperature: 0.7,
-          }),
-        }
+      const result = await analyzeMarketData(
+        statistics,
+        selectedMp,
+        selectedPeriod,
+        selectedType,
+        purchasePrice,
+        searchQuery
       );
 
-      if (!response.ok) {
-        throw new Error(`AI API error: ${response.status}`);
-      }
-
-      const aiResponse = await response.json();
-      const analysis = aiResponse.choices[0].message.content;
-
-      const analysisResult = {
-        id: Date.now(),
-        timestamp: new Date().toLocaleString("ru-RU"),
-        query: searchQuery,
-        marketplace: selectedMp,
-        period: selectedPeriod,
-        purchasePrice: userPurchasePrice,
-        analysis: analysis,
-        dataCount: analysisData.length,
-      };
-
-      setAiAnalysis(analysisResult);
-      setAnalysisHistory((prev) => [analysisResult, ...prev.slice(0, 4)]);
-      setShowAiPanel(true);
+      // Сохраняем в историю
+      setAnalysisHistory((prev) => [result, ...prev.slice(0, 4)]);
     } catch (error) {
-      console.error("AI Analysis error:", error);
-      setError(`Ошибка AI анализа: ${error.message}`);
-    } finally {
-      setAiLoading(false);
+      // Ошибка уже обработана в хуке
     }
   };
 
@@ -252,6 +171,19 @@ ${
     );
   };
 
+  // Очистка ошибки AI при закрытии панели
+  useEffect(() => {
+    if (!showAiPanel) {
+      clearAnalysis();
+    }
+  }, [showAiPanel]);
+
+  // Обработчик выбора из истории
+  const handleSelectFromHistory = (analysis) => {
+    setAiAnalysis(analysis);
+    setPurchasePrice(analysis.purchasePrice || "");
+  };
+
   useEffect(() => {
     // Загружаем последние поиски из localStorage
     const savedSearches = localStorage.getItem("moneyplaceRecentSearches");
@@ -275,6 +207,18 @@ ${
       setActiveTab(settings.tab || activeTab);
     }
   }, []);
+
+  const copyToClipboard = (text, itemId) => {
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        setCopiedItemId(itemId);
+        setTimeout(() => setCopiedItemId(null), 2000);
+      })
+      .catch((err) => {
+        console.error("Ошибка при копировании:", err);
+      });
+  };
 
   // Эффект для управления анимацией калькулятора
   useEffect(() => {
@@ -440,6 +384,7 @@ ${
   };
 
   const handleSearch = (page = 1) => {
+    setLoading(true);
     saveSearch(searchQuery);
     switch (activeTab) {
       case "products":
@@ -509,178 +454,6 @@ ${
   };
 
   // AI Analysis Panel Component
-  const renderAiAnalysisPanel = () => {
-    if (!showAiPanel) return null;
-
-    return (
-      <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-lg p-6 mb-8 border border-blue-200">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center space-x-3">
-            <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-2 rounded-lg">
-              <Bot className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">
-                AI Анализ рынка
-              </h3>
-              <p className="text-sm text-gray-600">
-                Рекомендации на основе данных
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={() => setShowAiPanel(false)}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Форма ввода цены закупки */}
-        {!aiAnalysis ? (
-          <div className="bg-white rounded-lg p-6 border border-blue-200">
-            <div className="text-center mb-6">
-              <Bot className="w-12 h-12 text-blue-600 mx-auto mb-3" />
-              <h4 className="text-lg font-semibold text-gray-900 mb-2">
-                Получить AI рекомендации по торговле
-              </h4>
-              <p className="text-gray-600">
-                Введите цену закупки товара для персональных рекомендаций
-              </p>
-            </div>
-
-            <div className="max-w-md mx-auto">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Цена закупки товара (в рублях){" "}
-                <span className="text-red-500">*</span>
-              </label>
-              <div className="flex items-center space-x-3">
-                <input
-                  type="number"
-                  placeholder="Например: 1500"
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-center text-lg"
-                  min="1"
-                  step="1"
-                />
-                <span className="text-gray-500 font-medium">₽</span>
-              </div>
-
-              <button
-                onClick={() =>
-                  statistics && analyzeMarketData(statistics, purchasePrice)
-                }
-                disabled={aiLoading || !purchasePrice || purchasePrice <= 0}
-                className="w-full mt-4 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-indigo-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-              >
-                {aiLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Анализирую данные...</span>
-                  </>
-                ) : (
-                  <>
-                    <TrendingUp className="w-5 h-5" />
-                    <span>Получить AI рекомендации</span>
-                  </>
-                )}
-              </button>
-
-              {!purchasePrice && (
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  Цена закупки необходима для расчета маржи и рентабельности
-                </p>
-              )}
-            </div>
-          </div>
-        ) : aiLoading ? (
-          <div className="bg-white rounded-lg p-8 text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">AI анализирует данные рынка...</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-lg p-6 border border-blue-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <CheckCircle className="w-5 h-5 text-green-500" />
-                <span className="text-sm text-gray-600">
-                  Анализ от {aiAnalysis.timestamp} | {aiAnalysis.dataCount}{" "}
-                  товаров
-                </span>
-              </div>
-              {aiAnalysis.purchasePrice && (
-                <div className="flex items-center space-x-2 bg-green-100 px-3 py-1 rounded-full">
-                  <DollarSign className="w-4 h-4 text-green-600" />
-                  <span className="text-sm font-medium text-green-800">
-                    Закупка: {formatPrice(aiAnalysis.purchasePrice)}
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="prose max-w-none">
-              <div
-                className="text-sm text-gray-800 leading-relaxed"
-                dangerouslySetInnerHTML={{
-                  __html: aiAnalysis.analysis
-                    .replace(
-                      /### (.+)/g,
-                      '<h3 class="text-lg font-semibold text-gray-900 mt-6 mb-3 border-b border-gray-200 pb-2">$1</h3>'
-                    )
-                    .replace(
-                      /\*\*(.+?)\*\*/g,
-                      '<strong class="font-semibold text-gray-900">$1</strong>'
-                    )
-                    .replace(/- (.+)/g, '<li class="ml-4 mb-2">$1</li>')
-                    .replace(
-                      /(\d+\. .+)/g,
-                      '<div class="mb-4 p-3 bg-blue-50 rounded-lg border-l-4 border-blue-500"><div class="font-medium text-blue-900">$1</div></div>'
-                    )
-                    .replace(/\n\n/g, "")
-                    .replace(/\n/g, ""),
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* История анализов */}
-        {analysisHistory.length > 1 && (
-          <div className="mt-6">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">
-              История анализов:
-            </h4>
-            <div className="space-y-2">
-              {analysisHistory.slice(1).map((analysis) => (
-                <div
-                  key={analysis.id}
-                  className="bg-white rounded-lg p-3 border border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors"
-                  onClick={() => setAiAnalysis(analysis)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2">
-                      <MessageSquare className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm font-medium text-gray-900">
-                        {analysis.query || "Анализ статистики"}
-                      </span>
-                    </div>
-                    <span className="text-xs text-gray-500">
-                      {analysis.timestamp}
-                    </span>
-                  </div>
-                  {analysis.purchasePrice && (
-                    <div className="text-xs text-green-600 mt-1">
-                      Цена закупки: {formatPrice(analysis.purchasePrice)}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const renderProductCard = (product) => (
     <div
@@ -773,31 +546,32 @@ ${
   };
 
   const renderStatisticsTable = () => (
-    <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-lg ">
       <div className="overflow-x-auto">
         <table className="w-full">
-          <thead className="bg-gray-50 border-b border-gray-200 whitespace-nowrap">
+          <thead className="bg-gray-50 border-b border-gray-200 whitespace-nowrap ">
             <tr>
-              <th className="px-6 py-4 text-left text-xs font-semibold">
+              <th className="px-6 py-4 text-left text-xs font-semibold sticky top-0 bg-gray-50 z-10">
                 Товар
               </th>
-              <th className="px-6 py-4 text-left text-xs font-semibold">
+              <th className="px-6 py-4 text-left text-xs font-semibold sticky top-0 bg-gray-50 z-10">
                 Выручка, ₽
               </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold">
-                Наличие, шт
+              <th className="px-6 py-4 text-center text-xs font-semibold sticky top-0 bg-gray-50 z-10">
+                Продажи, шт
               </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold">
+              <th className="px-6 py-4 text-center text-xs font-semibold sticky top-0 bg-gray-50 z-10">
                 Цена до скидки
               </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold">
+              <th className="px-6 py-4 text-center text-xs font-semibold sticky top-0 bg-gray-50 z-10">
+                Наличие, шт
+              </th>
+
+              <th className="px-6 py-4 text-center text-xs font-semibold sticky top-0 bg-gray-50 z-10">
                 Комиссия МП, %
               </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold">
+              <th className="px-6 py-4 text-center text-xs font-semibold sticky top-0 bg-gray-50 z-10">
                 Выкуп, %
-              </th>
-              <th className="px-6 py-4 text-center text-xs font-semibold">
-                Продажи, шт
               </th>
             </tr>
           </thead>
@@ -807,12 +581,28 @@ ${
                 <td className="px-6 py-4">
                   <div className="flex items-center space-x-4">
                     {item.product?.image && (
-                      <div className="relative">
+                      <div className="relative flex-shrink-0 group">
                         <img
                           src={item.product.image}
                           alt={item.product.name}
-                          className="w-12 h-12 object-cover rounded-lg"
+                          className="w-12 h-12 object-cover rounded-lg cursor-pointer"
                         />
+                        {/* Увеличенное изображение при hover - фиксированное позиционирование */}
+                        <div
+                          className="fixed opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-[9999] pointer-events-none transform -translate-x-1/2 -translate-y-1/2"
+                          style={{
+                            left: "35%",
+                            top: "50%",
+                            maxWidth: "300px",
+                            maxHeight: "300px",
+                          }}
+                        >
+                          <img
+                            src={item.product.image}
+                            alt={item.product.name}
+                            className="max-w-full max-h-full rounded-lg shadow-lg border-2 border-white bg-white"
+                          />
+                        </div>
                         <button
                           onClick={() =>
                             downloadImage(
@@ -820,7 +610,7 @@ ${
                               `product-${item.sku}.jpg`
                             )
                           }
-                          className="absolute top-0 right-0 bg-blue-600 text-white p-1 rounded-bl-lg rounded-tr-lg hover:bg-blue-700 transition-colors"
+                          className="absolute top-0 right-0 bg-blue-600 text-white p-1 rounded-bl-lg rounded-tr-lg hover:bg-blue-700 transition-colors z-10"
                           title="Скачать изображение"
                         >
                           <Download className="w-3 h-3" />
@@ -829,6 +619,7 @@ ${
                     )}
                     <div className="flex-1 min-w-0">
                       <Link
+                        target="_blank"
                         to={`/product/${item.id_product}`}
                         className="text-left hover:text-blue-600 transition-colors"
                       >
@@ -843,13 +634,24 @@ ${
                               ?.color
                           }`}
                         >
-                          WB
+                          {item.mp === "ozon" ? "OZON" : "WB"}
                         </span>
                         <button
                           onClick={() => openProductPage(item.sku, item.mp)}
                           className="text-blue-600 hover:text-blue-800 font-medium"
                         >
                           {item.sku}
+                        </button>
+                        <button
+                          onClick={() => copyToClipboard(item.sku, item.sku)}
+                          className="p-1 text-gray-500 hover:text-purple-600 transition-colors"
+                          title="Копировать артикул"
+                        >
+                          {copiedItemId === item.sku ? (
+                            <Check className="w-4 h-4 text-green-500" />
+                          ) : (
+                            <Copy className="w-4 h-4" />
+                          )}
                         </button>
                         {item.product?.rate && (
                           <div className="flex items-center">
@@ -888,6 +690,12 @@ ${
                   </div>
                 </td>
                 <td className="px-6 py-4 text-center">
+                  <span className="text-sm  text-gray-900">
+                    {formatNumber(item.Sales)}
+                  </span>
+                </td>
+
+                <td className="px-6 py-4 text-center">
                   <span className="text-sm text-gray-900">
                     {formatNumber(item?.sell_commission || 0)}%
                   </span>
@@ -895,11 +703,6 @@ ${
                 <td className="px-6 py-4 text-center">
                   <span className="text-sm text-gray-900">
                     {formatNumber(item?.buyout || 0)}%
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-center">
-                  <span className="text-sm font-semibold text-gray-900">
-                    {formatNumber(item.Sales)}
                   </span>
                 </td>
               </tr>
@@ -1121,12 +924,14 @@ ${
               </select>
             </div>
           </div>
-          <p className="text-gray-600">Аналитика маркетплейсов с AI помощником</p>
+          <p className="text-gray-600">
+            Аналитика маркетплейсов с AI помощником
+          </p>
         </div>
       </header>
 
       {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 sticky top-0 z-40">
+      <nav className="bg-white border-b border-gray-200 ">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex space-x-8 overflow-x-auto">
             {tabs.map((tab) => {
@@ -1317,8 +1122,27 @@ ${
           </div>
         )}
 
+        {/* Loading State */}
+        {loading && (
+          <div className="flex justify-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        )}
+
         {/* AI Analysis Panel */}
-        {activeTab === "statistics" && renderAiAnalysisPanel()}
+        {activeTab === "statistics" && showAiPanel && (
+          <AIAnalysisPanel
+            analysis={aiAnalysis}
+            loading={aiLoading}
+            purchasePrice={purchasePrice}
+            onPurchasePriceChange={setPurchasePrice}
+            onAnalyze={handleAIAnalysis}
+            onClose={() => setShowAiPanel(false)}
+            analysisHistory={analysisHistory.slice(1)} // исключаем текущий анализ
+            onSelectFromHistory={handleSelectFromHistory}
+            showPurchaseInput={!aiAnalysis}
+          />
+        )}
 
         {/* Калькулятор с анимацией */}
         {activeTab === "statistics" && (
