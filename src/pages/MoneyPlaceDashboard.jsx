@@ -22,8 +22,8 @@ import { Link } from "react-router-dom";
 import MarginCalculator from "../components/MarginCalculator";
 import useAIAnalysis from "../components/AIAnalysisService";
 import AIAnalysisPanel from "../components/AIAnalysisPanel";
-const API_KEY = "XGXVQZX24QKQ3YGL";
-const API_BASE = "https://api.moneyplace.io";
+const API_KEY = import.meta.env.VITE_API_KEY;
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 const MoneyPlaceDashboard = () => {
   const [activeTab, setActiveTab] = useState("statistics");
