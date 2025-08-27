@@ -83,6 +83,7 @@ const MoneyPlaceDashboard = () => {
 
   const tabs = [
     { id: "statistics", label: "Статистика", icon: BarChart3 },
+    { id: "article-search", label: "Поиск по артикулу", icon: Search, isLink: true },
     { id: "products", label: "Товары", icon: Package },
     { id: "categories", label: "Категории", icon: Tag },
     { id: "sellers", label: "Продавцы", icon: Store },
@@ -931,29 +932,45 @@ const MoneyPlaceDashboard = () => {
       </header>
 
       {/* Navigation */}
-      <nav className="bg-white border-b border-gray-200 ">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8 overflow-x-auto">
-            {tabs.map((tab) => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center space-x-2 px-4 py-4 border-b-2 transition-colors whitespace-nowrap ${
-                    activeTab === tab.id
-                      ? "border-blue-500 text-blue-600"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span className="font-medium">{tab.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </nav>
+     <nav className="bg-white border-b border-gray-200">
+  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="flex space-x-8 overflow-x-auto">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        
+        // Если это ссылка, а не вкладка
+        if (tab.isLink) {
+          return (
+            <Link
+              key={tab.id}
+              to="/article-search"
+              className="flex items-center space-x-2 px-4 py-4 border-b-2 border-transparent text-gray-600 hover:text-gray-900 transition-colors whitespace-nowrap"
+            >
+              <Icon className="w-5 h-5" />
+              <span className="font-medium">{tab.label}</span>
+            </Link>
+          );
+        }
+
+        // Обычная вкладка
+        return (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center space-x-2 px-4 py-4 border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <Icon className="w-5 h-5" />
+            <span className="font-medium">{tab.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  </div>
+</nav>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

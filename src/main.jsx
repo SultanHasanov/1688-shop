@@ -5,12 +5,14 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
 import ProductsPage from "./pages/ProductsPage.jsx";
 import MoneyPlaceDashboard from "./pages/MoneyPlaceDashboard.jsx";
 import ProductPage from "./pages/ProductsPage.jsx";
+import ArticleSearch from "./pages/ArticleSearch.jsx";
 createRoot(document.getElementById("root")).render(
   <Router>
     <Routes>
         {/* <Route index element={<App />} /> */}
         <Route path="/" element={<MoneyPlaceDashboard />} />
         <Route path="/product/:id" element={<ProductPage />} />
+        <Route path="/article-search" element={<ArticleSearch />} />
     </Routes>
   </Router>
 );
