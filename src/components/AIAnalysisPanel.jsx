@@ -21,7 +21,6 @@ const AIAnalysisPanel = ({
     }).format(price);
   };
 
-  if (!analysis && !loading) return null;
 
   return (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-100 rounded-xl shadow-lg p-6 mb-8 border border-blue-200">

@@ -1,7 +1,7 @@
 // components/AIAnalysisService.js
 import { useState } from 'react';
 
-const OPENROUTER_API_KEY = "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";
+const OPENROUTER_API_KEY = "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";
 
 export const useAIAnalysis = () => {
   const [aiAnalysis, setAiAnalysis] = useState(null);
